@@ -1,13 +1,39 @@
+import { Utils } from '@ethersphere/bee-js';
+import { Blossom } from '@fairdatasociety/blossom';
 import type { DBSchema, IDBPDatabase } from 'idb/build/entry';
+// @ts-ignore
+import { FdpStoragePersistence } from 'y-fdp-storage';
 
 export const dbVersion = 1;
 export const DEFAULT_DB_NAME = 'affine-local';
-
+export const DEFAULT_TOPIC = '/crdt/affine';
 export function upgradeDB(db: IDBPDatabase<BlockSuiteBinaryDB>) {
   db.createObjectStore('workspace', { keyPath: 'id' });
   db.createObjectStore('milestone', { keyPath: 'id' });
 }
 
+export function createFdpStoragePersistence(
+  topic?: string
+): FdpStoragePersistence {
+  const blossom = new Blossom();
+
+  const fdpStorage = blossom.fdpStorage;
+  const signer = {
+    address: Utils.makeEthAddress(blossom.fdpStorage.account.wallet?.address),
+    sign: async (digest: any) => {
+      return blossom.signer.signMessage(blossom.dappId!, digest);
+    },
+  };
+  // Create FdpStoragePersistence object
+  const persistence = new FdpStoragePersistence(
+    fdpStorage.connection.bee,
+    signer,
+    topic || DEFAULT_TOPIC,
+    fdpStorage.connection.postageBatchId
+  );
+
+  return persistence as FdpStoragePersistence;
+}
 export interface IndexedDBProvider {
   connect: () => void;
   disconnect: () => void;

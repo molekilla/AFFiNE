@@ -1,4 +1,4 @@
-import { openDB } from 'idb';
+// @ts-ignore
 import {
   applyUpdate,
   diffUpdate,
@@ -9,17 +9,15 @@ import {
 } from 'yjs';
 
 import type {
-  BlockSuiteBinaryDB,
   IndexedDBProvider,
-  WorkspaceMilestone,
+  WorkspaceMilestone} from './shared';
+import {
+  createFdpStoragePersistence
 } from './shared';
-import { dbVersion, DEFAULT_DB_NAME, upgradeDB } from './shared';
-import { tryMigrate } from './utils';
+import { DEFAULT_DB_NAME } from './shared';
 
 const indexeddbOrigin = Symbol('indexeddb-provider-origin');
 const snapshotOrigin = Symbol('snapshot-origin');
-
-let mergeCount = 500;
 
 /**
  * @internal
@@ -39,10 +37,6 @@ export const writeOperation = async (op: Promise<unknown>) => {
     capture: true,
   });
 };
-
-export function setMergeCount(count: number) {
-  mergeCount = count;
-}
 
 export function revertUpdate(
   doc: Doc,
@@ -102,25 +96,13 @@ export const markMilestone = async (
   name: string,
   dbName = DEFAULT_DB_NAME
 ): Promise<void> => {
-  const dbPromise = openDB<BlockSuiteBinaryDB>(dbName, dbVersion, {
-    upgrade: upgradeDB,
-  });
-  const db = await dbPromise;
-  const store = db
-    .transaction('milestone', 'readwrite')
-    .objectStore('milestone');
-  const milestone = await store.get('id');
+  const storeProvider = createFdpStoragePersistence(`${dbName}/${id}`);
+  const milestone = await storeProvider.read();
   const binary = encodeStateAsUpdate(doc);
   if (!milestone) {
-    await store.put({
-      id,
-      milestone: {
-        [name]: binary,
-      },
-    });
+    await storeProvider.store(binary);
   } else {
-    milestone.milestone[name] = binary;
-    await store.put(milestone);
+    await storeProvider.put(milestone);
   }
 };
 
@@ -128,18 +110,12 @@ export const getMilestones = async (
   id: string,
   dbName: string = DEFAULT_DB_NAME
 ): Promise<null | WorkspaceMilestone['milestone']> => {
-  const dbPromise = openDB<BlockSuiteBinaryDB>(dbName, dbVersion, {
-    upgrade: upgradeDB,
-  });
-  const db = await dbPromise;
-  const store = db
-    .transaction('milestone', 'readonly')
-    .objectStore('milestone');
-  const milestone = await store.get(id);
+  const storeProvider = createFdpStoragePersistence(`${dbName}/${id}`);
+  const milestone = await storeProvider.read();
   if (!milestone) {
     return null;
   }
-  return milestone.milestone;
+  return milestone;
 };
 
 export const createIndexedDBProvider = (
@@ -152,60 +128,26 @@ export const createIndexedDBProvider = (
   let early = true;
   let connected = false;
 
+  const storeProvider = createFdpStoragePersistence(`${dbName}/${id}`);
+
   async function handleUpdate(update: Uint8Array, origin: unknown) {
-    const db = await dbPromise;
     if (!connected) {
       return;
     }
     if (origin === indexeddbOrigin) {
       return;
     }
-    const store = db
-      .transaction('workspace', 'readwrite')
-      .objectStore('workspace');
-    let data = await store.get(id);
-    if (!data) {
-      data = {
-        id,
-        updates: [],
-      };
-    }
-    data.updates.push({
-      timestamp: Date.now(),
-      update,
-    });
-    if (data.updates.length > mergeCount) {
-      const updates = data.updates.map(({ update }) => update);
-      const doc = new Doc();
-      doc.transact(() => {
-        updates.forEach(update => {
-          applyUpdate(doc, update, indexeddbOrigin);
-        });
-      }, indexeddbOrigin);
 
-      const update = encodeStateAsUpdate(doc);
-      data = {
-        id,
-        updates: [
-          {
-            timestamp: Date.now(),
-            update,
-          },
-        ],
-      };
-      await writeOperation(store.put(data));
-    } else {
-      await writeOperation(store.put(data));
+    let data = await storeProvider.read();
+    if (!data) {
+      data = {};
     }
+
+    await writeOperation(storeProvider.store(data));
   }
 
-  const dbPromise = openDB<BlockSuiteBinaryDB>(dbName, dbVersion, {
-    upgrade: upgradeDB,
-  });
   const handleDestroy = async () => {
     connected = true;
-    const db = await dbPromise;
-    db.close();
   };
   const apis = {
     connect: async () => {
@@ -219,33 +161,20 @@ export const createIndexedDBProvider = (
       connected = true;
       doc.on('update', handleUpdate);
       doc.on('destroy', handleDestroy);
-      // only run promise below, otherwise the logic is incorrect
-      const db = await dbPromise;
-      await tryMigrate(db, id, dbName);
-      const store = db
-        .transaction('workspace', 'readwrite')
-        .objectStore('workspace');
-      const data = await store.get(id);
+      const storeProvider = createFdpStoragePersistence(
+        `${dbName}/${id}/workspace`
+      );
+      const data = await storeProvider.read();
       if (!connected) {
         return;
       }
       if (!data) {
-        await writeOperation(
-          db.put('workspace', {
-            id,
-            updates: [
-              {
-                timestamp: Date.now(),
-                update: encodeStateAsUpdate(doc),
-              },
-            ],
-          })
-        );
+        await writeOperation(storeProvider.store(encodeStateAsUpdate(doc)));
       } else {
-        const updates = data.updates.map(({ update }) => update);
+        const updates = [data];
         const fakeDoc = new Doc();
         fakeDoc.transact(() => {
-          updates.forEach(update => {
+          updates.forEach((update: Uint8Array) => {
             applyUpdate(fakeDoc, update);
           });
         }, indexeddbOrigin);
@@ -253,20 +182,9 @@ export const createIndexedDBProvider = (
           encodeStateAsUpdate(doc),
           encodeStateAsUpdate(fakeDoc)
         );
-        await writeOperation(
-          store.put({
-            ...data,
-            updates: [
-              ...data.updates,
-              {
-                timestamp: Date.now(),
-                update: newUpdate,
-              },
-            ],
-          })
-        );
+        await writeOperation(storeProvider.store(newUpdate));
         doc.transact(() => {
-          updates.forEach(update => {
+          updates.forEach((update: Uint8Array) => {
             applyUpdate(doc, update);
           });
         }, indexeddbOrigin);
@@ -286,7 +204,7 @@ export const createIndexedDBProvider = (
       if (connected) {
         throw new CleanupWhenConnectingError();
       }
-      (await dbPromise).delete('workspace', id);
+      // (await dbPromise).delete('workspace', id);
     },
     whenSynced: Promise.resolve(),
     get connected() {
