@@ -1,19 +1,13 @@
-// @ts-ignore
 import {
   applyUpdate,
-  diffUpdate,
   Doc,
   encodeStateAsUpdate,
   encodeStateVector,
   UndoManager,
 } from 'yjs';
 
-import type {
-  IndexedDBProvider,
-  WorkspaceMilestone} from './shared';
-import {
-  createFdpStoragePersistence
-} from './shared';
+import type { WorkspaceMilestone } from './shared';
+import { createFdpStoragePersistenceMock } from './shared';
 import { DEFAULT_DB_NAME } from './shared';
 
 const indexeddbOrigin = Symbol('indexeddb-provider-origin');
@@ -96,13 +90,28 @@ export const markMilestone = async (
   name: string,
   dbName = DEFAULT_DB_NAME
 ): Promise<void> => {
-  const storeProvider = createFdpStoragePersistence(`${dbName}/${id}`);
-  const milestone = await storeProvider.read();
+  const store = createFdpStoragePersistenceMock(`${dbName}/milestone/${id}`);
+  let milestone: WorkspaceMilestone | undefined;
+  try {
+    milestone = await store.read();
+  } catch (e) {}
   const binary = encodeStateAsUpdate(doc);
+  console.log('binary', binary);
   if (!milestone) {
-    await storeProvider.store(binary);
+    await store.storeWithSchema((update: string) => {
+      return {
+        milestone: {
+          [name]: update,
+        },
+      };
+    }, binary);
   } else {
-    await storeProvider.put(milestone);
+    await store.storeWithSchema((update: string) => {
+      // @ts-ignore
+      milestone.milestone[name] = update;
+
+      return milestone;
+    }, binary);
   }
 };
 
@@ -110,40 +119,53 @@ export const getMilestones = async (
   id: string,
   dbName: string = DEFAULT_DB_NAME
 ): Promise<null | WorkspaceMilestone['milestone']> => {
-  const storeProvider = createFdpStoragePersistence(`${dbName}/${id}`);
-  const milestone = await storeProvider.read();
+  const store = createFdpStoragePersistenceMock(`${dbName}/milestone/${id}`);
+  let milestone;
+  try {
+    milestone = await store.read();
+    console.log('milestone', milestone);
+  } catch (e) {}
   if (!milestone) {
     return null;
   }
-  return milestone;
+
+  return milestone.milestone;
 };
 
 export const createIndexedDBProvider = (
   id: string,
   doc: Doc,
   dbName: string = DEFAULT_DB_NAME
-): IndexedDBProvider => {
+) => {
   let resolve: () => void;
   let reject: (reason?: unknown) => void;
   let early = true;
   let connected = false;
-
-  const storeProvider = createFdpStoragePersistence(`${dbName}/${id}`);
+  const store = createFdpStoragePersistenceMock(`${dbName}/workspace/${id}`);
 
   async function handleUpdate(update: Uint8Array, origin: unknown) {
-    if (!connected) {
-      return;
-    }
     if (origin === indexeddbOrigin) {
       return;
     }
 
-    let data = await storeProvider.read();
-    if (!data) {
-      data = {};
-    }
+    // @ts-ignore
+    let data;
+    try {
+      data = await store.read();
+      console.log('read', data);
+    } catch (e) {}
 
-    await writeOperation(storeProvider.store(data));
+    if (!data) {
+      const update = encodeStateAsUpdate(doc);
+      console.log('update', update);
+      await writeOperation(store.storeUpdate(update));
+    } else {
+      console.log('write', data);
+      await writeOperation(
+        // @ts-ignore
+        store.store(update)
+      );
+    }
   }
 
   const handleDestroy = async () => {
@@ -161,34 +183,18 @@ export const createIndexedDBProvider = (
       connected = true;
       doc.on('update', handleUpdate);
       doc.on('destroy', handleDestroy);
-      const storeProvider = createFdpStoragePersistence(
-        `${dbName}/${id}/workspace`
-      );
-      const data = await storeProvider.read();
+
+      const temp = await store.read();
+      console.log('connect', temp);
+
       if (!connected) {
         return;
       }
-      if (!data) {
-        await writeOperation(storeProvider.store(encodeStateAsUpdate(doc)));
-      } else {
-        const updates = [data];
-        const fakeDoc = new Doc();
-        fakeDoc.transact(() => {
-          updates.forEach((update: Uint8Array) => {
-            applyUpdate(fakeDoc, update);
-          });
-        }, indexeddbOrigin);
-        const newUpdate = diffUpdate(
-          encodeStateAsUpdate(doc),
-          encodeStateAsUpdate(fakeDoc)
-        );
-        await writeOperation(storeProvider.store(newUpdate));
-        doc.transact(() => {
-          updates.forEach((update: Uint8Array) => {
-            applyUpdate(doc, update);
-          });
-        }, indexeddbOrigin);
-      }
+      await writeOperation(store.storeUpdate(encodeStateAsUpdate(doc)));
+
+      doc.transact(() => {
+        applyUpdate(doc, temp);
+      }, indexeddbOrigin);
       early = false;
       resolve();
     },
@@ -204,7 +210,6 @@ export const createIndexedDBProvider = (
       if (connected) {
         throw new CleanupWhenConnectingError();
       }
-      // (await dbPromise).delete('workspace', id);
     },
     whenSynced: Promise.resolve(),
     get connected() {

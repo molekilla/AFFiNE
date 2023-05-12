@@ -1,16 +1,12 @@
-import { Utils } from '@ethersphere/bee-js';
+import { Bee, Utils } from '@ethersphere/bee-js';
 import { Blossom } from '@fairdatasociety/blossom';
-import type { DBSchema, IDBPDatabase } from 'idb/build/entry';
+import type { DBSchema } from 'idb/build/entry';
 // @ts-ignore
-import { FdpStoragePersistence } from 'y-fdp-storage';
+import { FdpStoragePersistence, makePrivateKeySigner } from 'y-fdp-storage';
 
 export const dbVersion = 1;
 export const DEFAULT_DB_NAME = 'affine-local';
 export const DEFAULT_TOPIC = '/crdt/affine';
-export function upgradeDB(db: IDBPDatabase<BlockSuiteBinaryDB>) {
-  db.createObjectStore('workspace', { keyPath: 'id' });
-  db.createObjectStore('milestone', { keyPath: 'id' });
-}
 
 export function createFdpStoragePersistence(
   topic?: string
@@ -34,6 +30,40 @@ export function createFdpStoragePersistence(
 
   return persistence as FdpStoragePersistence;
 }
+
+export function createFdpStoragePersistenceMock(topic?: string) {
+  const bee = new Bee('http://localhost:1633');
+  const postageBatchId =
+    'ed214aa124d43bb216b1c30a16bcb14708bd1afd1ff2c3816b06a3f357fbb6e5';
+
+  const testIdentity = {
+    privateKey:
+      '634fb5a872396d9693e5c9f9d7233cfa93f395c093371017ff44aa9ae6564cdd',
+    publicKey:
+      '03c32bb011339667a487b6c1c35061f15f7edc36aa9a0f8648aba07a4b8bd741b4',
+    address: '8d3766440f0d7b949a5e32995d09619a7f86e632',
+  };
+  const wallet = makePrivateKeySigner(
+    Utils.hexToBytes(testIdentity.privateKey)
+  );
+
+  const signer = {
+    address: Utils.makeEthAddress(testIdentity.address),
+    sign: async (digest: any) => {
+      return wallet.sign(digest);
+    },
+  };
+  // Create FdpStoragePersistence object
+  const persistence = new FdpStoragePersistence(
+    bee,
+    signer,
+    topic || DEFAULT_TOPIC,
+    postageBatchId
+  );
+
+  return persistence as FdpStoragePersistence;
+}
+
 export interface IndexedDBProvider {
   connect: () => void;
   disconnect: () => void;

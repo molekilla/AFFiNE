@@ -2,8 +2,14 @@ import { openDB } from 'idb';
 import type { IDBPDatabase } from 'idb/build/entry';
 import { mergeUpdates } from 'yjs';
 
-import type { BlockSuiteBinaryDB, OldYjsDB, UpdateMessage } from './shared';
-import { dbVersion, DEFAULT_DB_NAME, upgradeDB } from './shared';
+import type {
+  BlockSuiteBinaryDB,
+  OldYjsDB,
+  UpdateMessage} from './shared';
+import {
+  createFdpStoragePersistenceMock
+} from './shared';
+import { DEFAULT_DB_NAME } from './shared';
 
 let allDb: IDBDatabaseInfo[];
 
@@ -130,15 +136,16 @@ export async function downloadBinary(
   id: string,
   dbName = DEFAULT_DB_NAME
 ): Promise<UpdateMessage['update'] | false> {
-  const dbPromise = openDB<BlockSuiteBinaryDB>(dbName, dbVersion, {
-    upgrade: upgradeDB,
-  });
-  const db = await dbPromise;
-  const t = db.transaction('workspace', 'readonly').objectStore('workspace');
-  const doc = await t.get(id);
+  const store = createFdpStoragePersistenceMock(`${dbName}/workspace/${id}`);
+  // @ts-ignore
+  let doc;
+  try {
+    doc = await store.read();
+  } catch (e) {}
+
   if (!doc) {
     return false;
   } else {
-    return mergeUpdates(doc.updates.map(({ update }) => update));
+    return doc;
   }
 }

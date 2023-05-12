@@ -8737,10 +8737,11 @@ __metadata:
     "@blocksuite/store": 0.0.0-20230509150141-055b5702-nightly
     "@ethersphere/bee-js": ^6.0.0-pre.2
     "@fairdatasociety/blossom": ^0.2.3
+    ethers: ^5.7.0
     idb: ^7.1.1
     vite: ^4.3.5
     vite-plugin-dts: ^2.3.0
-    y-fdp-storage: 0.2.12
+    y-fdp-storage: 0.2.13
     y-indexeddb: ^9.0.11
   peerDependencies:
     yjs: ^13.5.51
@@ -26632,9 +26633,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"y-fdp-storage@npm:0.2.12":
-  version: 0.2.12
-  resolution: "y-fdp-storage@npm:0.2.12"
+"y-fdp-storage@npm:0.2.13":
+  version: 0.2.13
+  resolution: "y-fdp-storage@npm:0.2.13"
   dependencies:
     "@ethersphere/bee-js": ^6.0.0-pre.2
     "@types/elliptic": ^6.4.14
@@ -26644,7 +26645,7 @@ __metadata:
     multiformats: ^9.8.1
     rxjs: ^7.8.0
     yjs: ^13.5.48
-  checksum: 74ddbfc5b65cfd9e3a344b3c873f87e48a3a363a14ac568c341086f5ffcd55c2f877518c39cddc1a7e6e72fc5ffeaca341ceadbe73ec68cb0ffb232f55d73db5
+  checksum: 41e748c5c976b923664fa678f9eb31bd05d98893601d544b66dda8fb39c896180dfeb2549f512764f6eb42427206c72e1d47de1f3d6ddb0c46d17465abb9fab5
   languageName: node
   linkType: hard
 

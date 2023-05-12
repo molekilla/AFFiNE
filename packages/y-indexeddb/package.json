@@ -27,8 +27,9 @@
   "dependencies": {
     "@ethersphere/bee-js": "^6.0.0-pre.2",
     "@fairdatasociety/blossom": "^0.2.3",
+    "ethers": "^5.7.0",
     "idb": "^7.1.1",
-    "y-fdp-storage": "0.2.12"
+    "y-fdp-storage": "0.2.13"
   },
   "devDependencies": {
     "@blocksuite/blocks": "0.0.0-20230509150141-055b5702-nightly",
