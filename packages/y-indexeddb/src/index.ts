@@ -3,6 +3,7 @@ import {
   Doc,
   encodeStateAsUpdate,
   encodeStateVector,
+  mergeUpdates,
   UndoManager,
 } from 'yjs';
 
@@ -152,19 +153,25 @@ export const createIndexedDBProvider = (
     let data;
     try {
       data = await store.read();
+      data = store.fromHexToUint8Array(data);
+      applyUpdate(doc, data, indexeddbOrigin);
       console.log('read', data);
     } catch (e) {}
 
     if (!data) {
       const update = encodeStateAsUpdate(doc);
       console.log('update', update);
-      await writeOperation(store.storeUpdate(update));
+      // applyUpdate(doc, update, indexeddbOrigin);
+      await writeOperation(store.store(update));
     } else {
+      data = mergeUpdates([data, update]);
       console.log('write', data);
+
       await writeOperation(
         // @ts-ignore
-        store.store(update)
+        store.store(data)
       );
+      // applyUpdate(doc, data, indexeddbOrigin);
     }
   }
 
@@ -184,18 +191,21 @@ export const createIndexedDBProvider = (
       doc.on('update', handleUpdate);
       doc.on('destroy', handleDestroy);
 
-      const temp = await store.read();
-      console.log('connect', temp);
+      let temp = await store.read();
+      if (!temp) {
+        temp = store.fromHexToUint8Array(temp);
+        console.log('connect', temp);
 
-      if (!connected) {
-        return;
+        if (!connected) {
+          return;
+        }
+        // await writeOperation(store.store(encodeStateAsUpdate(doc)));
+
+        doc.transact(() => {
+          applyUpdate(doc, temp);
+        }, indexeddbOrigin);
+        early = false;
       }
-      await writeOperation(store.storeUpdate(encodeStateAsUpdate(doc)));
-
-      doc.transact(() => {
-        applyUpdate(doc, temp);
-      }, indexeddbOrigin);
-      early = false;
       resolve();
     },
     disconnect() {
