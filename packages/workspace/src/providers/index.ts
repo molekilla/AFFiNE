@@ -24,6 +24,7 @@ import {
 } from '@toeverything/y-indexeddb';
 
 import { createBroadCastChannelProvider } from './broad-cast-channel';
+import { createFdpProvider } from './fdp';
 import { localProviderLogger as logger } from './logger';
 
 const Y = BlockSuiteWorkspace.Y;
@@ -146,6 +147,7 @@ const createIndexedDBDownloadProvider = (
       logger.info('connect indexeddb provider', blockSuiteWorkspace.id);
       downloadBinary(blockSuiteWorkspace.id)
         .then(binary => {
+          //    debugger;
           if (binary !== false) {
             Y.applyUpdate(blockSuiteWorkspace.doc, binary);
           }
@@ -285,8 +287,9 @@ export const createLocalProviders = (
     [
       config.enableBroadCastChannelProvider &&
         createBroadCastChannelProvider(blockSuiteWorkspace),
-      createIndexedDBBackgroundProvider(blockSuiteWorkspace),
-      createIndexedDBDownloadProvider(blockSuiteWorkspace),
+      // createIndexedDBBackgroundProvider(blockSuiteWorkspace),
+      createFdpProvider(blockSuiteWorkspace),
+      //  createIndexedDBDownloadProvider(blockSuiteWorkspace),
       environment.isDesktop && createSQLiteProvider(blockSuiteWorkspace),
     ] as any[]
   ).filter(v => Boolean(v));

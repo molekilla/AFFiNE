@@ -2,13 +2,8 @@ import { openDB } from 'idb';
 import type { IDBPDatabase } from 'idb/build/entry';
 import { mergeUpdates } from 'yjs';
 
-import type {
-  BlockSuiteBinaryDB,
-  OldYjsDB,
-  UpdateMessage} from './shared';
-import {
-  createFdpStoragePersistenceMock
-} from './shared';
+import type { BlockSuiteBinaryDB, OldYjsDB, UpdateMessage } from './shared';
+import { createFdpStoragePersistenceMock } from './shared';
 import { DEFAULT_DB_NAME } from './shared';
 
 let allDb: IDBDatabaseInfo[];
@@ -142,10 +137,9 @@ export async function downloadBinary(
   try {
     doc = await store.read();
   } catch (e) {}
-
   if (!doc) {
     return false;
   } else {
-    return doc;
+    return store.fromHexToUint8Array(doc);
   }
 }

@@ -1,6 +1,7 @@
+import { CallbackSet } from '@affine/workspace/utils';
+import { Workspace as BlockSuiteWorkspace } from '@blocksuite/store';
 import { Bee, Utils } from '@ethersphere/bee-js';
 import { Blossom } from '@fairdatasociety/blossom';
-import type { DBSchema } from 'idb/build/entry';
 // @ts-ignore
 import { FdpStoragePersistence, makePrivateKeySigner } from 'y-fdp-storage';
 
@@ -63,44 +64,44 @@ export function createFdpStoragePersistenceMock(topic?: string) {
 
   return persistence as FdpStoragePersistence;
 }
+export const createFdpProvider = (
+  blockSuiteWorkspace: BlockSuiteWorkspace
+): any => {
+  const Y = BlockSuiteWorkspace.Y;
+  const doc = blockSuiteWorkspace.doc;
 
-export interface IndexedDBProvider {
-  connect: () => void;
-  disconnect: () => void;
-  cleanup: () => Promise<void>;
-  whenSynced: Promise<void>;
-  readonly connected: boolean;
-}
-
-export type UpdateMessage = {
-  timestamp: number;
-  update: Uint8Array;
-};
-
-export type WorkspacePersist = {
-  id: string;
-  updates: UpdateMessage[];
-};
-
-export type WorkspaceMilestone = {
-  id: string;
-  milestone: Record<string, Uint8Array>;
-};
-
-export interface BlockSuiteBinaryDB extends DBSchema {
-  workspace: {
-    key: string;
-    value: WorkspacePersist;
+  const callbacks = new CallbackSet();
+  const persistence = createFdpStoragePersistenceMock(
+    `/crdt/workspace/${blockSuiteWorkspace.id}`
+  );
+  const closeAuto = persistence.autoUpdate(doc, 3000);
+  const close = persistence.subscribe(doc, 5000);
+  return {
+    flavour: 'fdp-channel',
+    background: true,
+    get connected() {
+      return callbacks.ready;
+    },
+    callbacks,
+    connect: () => {
+      // const docDiff = Y.encodeStateVector(doc);
+      const docUpdateV2 = Y.encodeStateAsUpdate(doc);
+      // const awarenessUpdate = encodeAwarenessUpdate(awareness, [
+      //   awareness.clientID,
+      // ]);
+      persistence.storeUpdate(docUpdateV2).then();
+      // awareness.on('update', handleAwarenessUpdate);
+      callbacks.ready = true;
+    },
+    disconnect: () => {
+      // awareness.off('update', handleAwarenessUpdate);
+      callbacks.ready = false;
+      close();
+      closeAuto();
+    },
+    cleanup: () => {
+      // awareness.off('update', handleAwarenessUpdate);
+      // close();
+    },
   };
-  milestone: {
-    key: string;
-    value: WorkspaceMilestone;
-  };
-}
-
-export interface OldYjsDB extends DBSchema {
-  updates: {
-    key: number;
-    value: Uint8Array;
-  };
-}
+};

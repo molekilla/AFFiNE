@@ -154,15 +154,15 @@ export const createIndexedDBProvider = (
     try {
       data = await store.read();
       data = store.fromHexToUint8Array(data);
-      applyUpdate(doc, data, indexeddbOrigin);
+      //      applyUpdate(doc, data, indexeddbOrigin);
       console.log('read', data);
     } catch (e) {}
 
     if (!data) {
-      const update = encodeStateAsUpdate(doc);
-      console.log('update', update);
       // applyUpdate(doc, update, indexeddbOrigin);
-      await writeOperation(store.store(update));
+      await writeOperation(
+        store.store(mergeUpdates([encodeStateAsUpdate(doc), update]))
+      );
     } else {
       data = mergeUpdates([data, update]);
       console.log('write', data);
